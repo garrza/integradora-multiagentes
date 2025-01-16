@@ -159,10 +159,13 @@ def main():
                 if event.key == pygame.K_ESCAPE:
                     done = True
 
+        # Render scene
         display()
 
+        # Update display
         pygame.display.flip()
 
+        # Control frame rate
         clock.tick(60)
 
     pygame.quit()
