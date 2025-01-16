@@ -4,8 +4,8 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 import sys
-from notsrc.CleaningBot import CleaningBot
-from notsrc.Trash import Trash
+from CleaningBot import CleaningBot
+from Trash import Trash
 
 # Window dimensions
 screen_width = 800
