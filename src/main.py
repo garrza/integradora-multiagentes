@@ -2,10 +2,15 @@ import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
-from OpenGL.GLUT import *
-import sys
+import numpy as np
 from CleaningBot import CleaningBot
 from Trash import Trash
+from Toilet import Toilet
+import os
+from PIL import Image
+import sys
+import random
+import math
 
 # Window dimensions
 screen_width = 800
@@ -41,12 +46,40 @@ DimBoard = 200
 # Usable area for trash (slightly smaller than board dimensions)
 TRASH_AREA = DimBoard * 0.8  # 80% of board size
 
-# Initialize lists for bots and trash
+# Global variables
 bots = []
 trash_objects = []
+toilet = None
 n_bots = 5
-n_trash = 50  # Increased number of trash objects
+n_trash = 20
 
+# Texture ID for bot face
+bot_face_texture = None
+
+def load_texture(image_path):
+    # Load image using PIL
+    image = Image.open(image_path)
+    image = image.transpose(Image.FLIP_TOP_BOTTOM)  # OpenGL expects textures flipped
+    
+    # Convert image to RGBA if it's not already
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+    
+    # Get image data as bytes
+    img_data = image.tobytes()
+    
+    # Generate texture ID
+    texture_id = glGenTextures(1)
+    
+    # Bind and set up texture
+    glBindTexture(GL_TEXTURE_2D, texture_id)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
+    
+    # Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    
+    return texture_id
 
 def Axis():
     """Draw coordinate axes"""
@@ -79,9 +112,12 @@ def Axis():
 
 def Init():
     """Initialize OpenGL context and objects"""
+    global bot_face_texture
+    global toilet
+    
     screen = pygame.display.set_mode((screen_width, screen_height), DOUBLEBUF | OPENGL)
     pygame.display.set_caption("Trash Cleaning Simulation")
-
+    
     # Set up the projection matrix
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
@@ -95,13 +131,26 @@ def Init():
     # Set up the rendering context
     glClearColor(0, 0, 0, 0)
     glEnable(GL_DEPTH_TEST)
+    glEnable(GL_TEXTURE_2D)  # Enable texturing
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
+    # Load bot face texture
+    texture_path = os.path.join(os.path.dirname(__file__), 'assets', 'close.jpg')
+    bot_face_texture = load_texture(texture_path)
+    
+    # Load open mouth texture
+    open_texture_path = os.path.join(os.path.dirname(__file__), 'assets', 'open.jpg')
+    bot_face_open_texture = load_texture(open_texture_path)
+    
     # Initialize bots and trash
     for i in range(n_bots):
-        bots.append(CleaningBot(DimBoard))
+        bot = CleaningBot(DimBoard, i, n_bots, bot_face_texture)
+        bot.face_texture_open = bot_face_open_texture
+        bots.append(bot)
     for i in range(n_trash):
         trash_objects.append(Trash(DimBoard))
+    
+    toilet = Toilet()
 
 
 def display():
@@ -133,6 +182,9 @@ def display():
     glEnd()
     glPopMatrix()
 
+    # Draw toilet
+    toilet.draw()
+
     # Draw and update all objects
     for trash in trash_objects:
         trash.draw()
@@ -158,7 +210,9 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     done = True
-
+                elif event.key == pygame.K_f:
+                    toilet.flush()  # Manual flush with 'F' key
+        
         display()
 
         pygame.display.flip()
