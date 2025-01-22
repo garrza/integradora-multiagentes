@@ -212,6 +212,10 @@ def main():
                     done = True
                 elif event.key == pygame.K_f:
                     toilet.flush()  # Manual flush with 'F' key
+                elif event.key == pygame.K_t:
+                    # Create a new Trash object when 'T' is pressed
+                    new_trash = Trash(DimBoard)
+                    trash_objects.append(new_trash)
         
         display()
 

@@ -6,7 +6,7 @@ import math
 class Trash:
     def __init__(self, dim):
         # Vertices of the cube (burger)
-        size = 2.0  # Base size of the burger
+        size = 4.0  # Doubled base size of the burger
         self.points = np.array([
             [-size, 0.0, size],    # Bottom layer vertices
             [size, 0.0, size],

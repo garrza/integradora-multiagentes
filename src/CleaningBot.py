@@ -29,6 +29,42 @@ class CleaningBot:
             ]
         )
 
+        # Define centipede-like legs (6 on each side)
+        self.leg_points = []
+        leg_spacing = 4.0  # Space between legs
+        leg_length = 10.0  # Length of each leg
+        leg_height = 2.0   # Height of leg attachment point
+        
+        # Left side legs
+        for i in range(6):
+            x_offset = -8.0  # Left side x-coordinate
+            z_offset = 12.0 - (i * leg_spacing)  # Distribute legs along body length
+            self.leg_points.extend([
+                # Upper leg point
+                [x_offset, leg_height, z_offset],
+                # Lower leg point (extended downward)
+                [x_offset, -leg_height, z_offset - leg_length]
+            ])
+        
+        # Right side legs
+        for i in range(6):
+            x_offset = 8.0  # Right side x-coordinate
+            z_offset = 12.0 - (i * leg_spacing)  # Distribute legs along body length
+            self.leg_points.extend([
+                # Upper leg point
+                [x_offset, leg_height, z_offset],
+                # Lower leg point (extended downward)
+                [x_offset, -leg_height, z_offset - leg_length]
+            ])
+
+        self.leg_points = np.array(self.leg_points)
+
+        # Leg animation parameters
+        self.leg_animation_phase = 0.0  # Current phase of leg animation
+        self.leg_animation_speed = 0.3  # Speed of leg movement
+        self.leg_max_swing = 3.0  # Maximum leg swing distance
+        self.leg_swing_frequency = 2 * math.pi  # Frequency of leg movement
+
         self.DimBoard = dim
 
         # Position bots in a circle around the center
@@ -83,6 +119,9 @@ class CleaningBot:
         else:
             self.speed = self.base_speed
 
+        # Determine if bot is moving
+        is_moving = False
+
         if self.state == "searching":
             closest_trash = self.search_trash(trash_objects)
             if closest_trash:
@@ -114,6 +153,7 @@ class CleaningBot:
                     self.Position[2] += self.speed * math.cos(
                         math.radians(self.rotation)
                     )
+                    is_moving = True
         elif self.state == "eating":
             # Update eating animation
             self.eating_animation_progress += self.eating_animation_speed
@@ -141,6 +181,7 @@ class CleaningBot:
                 self.eating_cycles = 0
         elif self.state == "returning":
             self.return_to_base()
+            is_moving = True
         elif self.state == "dumping":
             self.dump_trash()
         elif self.state == "dumping_animation":
@@ -150,6 +191,15 @@ class CleaningBot:
                 self.carrying_trash = None
                 self.state = "searching"
                 self.target_fatness = 1.0  # Return to normal size after dumping
+
+        # Update leg animation
+        if is_moving:
+            self.leg_animation_phase += self.leg_animation_speed
+            if self.leg_animation_phase >= 2 * math.pi:
+                self.leg_animation_phase -= 2 * math.pi
+        else:
+            # Reset leg animation phase when not moving
+            self.leg_animation_phase = 0.0
 
     def draw_body(self):
         glColor3f(0.0, 0.7, 0.0)  # Green color for body
@@ -283,25 +333,56 @@ class CleaningBot:
         if self.face_texture is not None:
             glDisable(GL_TEXTURE_2D)
 
+    def draw_legs(self):
+        glColor3f(0.0, 0.7, 0.0)  # Green color for legs
+
+        glPushMatrix()
+        glScalef(self.fatness, 1.0, 1.0)
+
+        glBegin(GL_LINES)
+        for i in range(0, len(self.leg_points), 2):
+            # Calculate leg swing based on animation phase
+            leg_swing = math.sin(
+                self.leg_animation_phase + (i / len(self.leg_points)) * self.leg_swing_frequency
+            ) * self.leg_max_swing
+
+            # Apply leg swing to upper leg point
+            upper_leg_point = [
+                self.leg_points[i][0],
+                self.leg_points[i][1] + leg_swing,
+                self.leg_points[i][2],
+            ]
+
+            glVertex3f(upper_leg_point[0], upper_leg_point[1], upper_leg_point[2])
+            glVertex3f(
+                self.leg_points[i+1][0], self.leg_points[i+1][1], self.leg_points[i+1][2]
+            )
+        glEnd()
+
+        glPopMatrix()
+
     def draw(self):
         glPushMatrix()
         glTranslatef(self.Position[0], self.Position[1], self.Position[2])
-        glRotatef(self.rotation, 0, 1, 0)  # Rotate around Y axis
+        glRotatef(self.rotation, 0.0, 1.0, 0.0)
 
-        # Draw the main body
+        # Draw body
         self.draw_body()
 
-        # Draw the front marker (triangle)
-        glColor3f(1.0, 0.0, 0.0)  # Red color for the front marker
-        glBegin(GL_TRIANGLES)
+        # Draw front marker points
+        glColor3f(1.0, 0.0, 0.0)  # Red color
+        glBegin(GL_POINTS)
         for point in self.front_points:
             glVertex3f(point[0], point[1], point[2])
         glEnd()
 
+        # Draw the legs
+        self.draw_legs()
+
         # Draw dumping animation if active
         if self.state == "dumping_animation":
             self.draw_dump_animation()
-
+        
         glPopMatrix()
 
     def draw_dump_animation(self):
