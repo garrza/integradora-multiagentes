@@ -3,9 +3,8 @@ from OpenGL.GL import *
 import math
 import random
 
-
 class CleaningBot:
-    def __init__(self, dim, bot_index=0, total_bots=1, face_texture=None, toilet=None):
+    def __init__(self, dim, bot_index=0, total_bots=1, face_texture=None, map_limit=0, toilet=None):
         # Make front face a perfect square (12x12)
         self.body_points = np.array(
             [
@@ -66,26 +65,16 @@ class CleaningBot:
         self.leg_swing_frequency = 2 * math.pi  # Frequency of leg movement
 
         self.DimBoard = dim
+        
+        # Calculate position of the bot
+        #radius = 30.0  # Half the radius for smaller bots
+        angle = (2 * math.pi * bot_index) / total_bots
+        self.Position = [map_limit - 20, 0, map_limit - 20]
+        # Make bots face outward from the center
+        self.rotation = math.degrees(angle) + 270
 
-        # Position bots in a circle around the center
-        if total_bots == 1:
-            # If there's only one bot, put it at the center
-            self.Position = [0.0, 0.0, 0.0]
-            self.rotation = 0.0
-        else:
-            # Calculate position in a circle
-            radius = 30.0  # Half the radius for smaller bots
-            angle = (2 * math.pi * bot_index) / total_bots
-            self.Position = [
-                radius * math.cos(angle),  # X coordinate
-                0.0,  # Y coordinate (on the ground)
-                radius * math.sin(angle),  # Z coordinate
-            ]
-            # Make bots face outward from the center
-            self.rotation = math.degrees(angle) + 180
-
-        self.speed = 1.6  # Half the speed for smaller bots
-        self.base_speed = 1.6  # Store the base speed
+        self.speed = 4  # Half the speed for smaller bots
+        self.base_speed = 4  # Store the base speed
         self.carrying_trash = None
         self.state = "searching"
         self.fatness = 1.0  # Scale factor for body width (1.0 = normal, 1.4 = fat)
@@ -101,6 +90,10 @@ class CleaningBot:
         self.eating_animation_speed = 0.2  # Controls how fast the mouth opens/closes
         self.eating_cycles = 0  # Count how many times we've opened/closed the mouth
         self.toilet = toilet  # Store toilet reference
+        
+        self.direction = -1 # 1 for forward, -1 for backwards
+        self.lane = 0 # Keeps track of the current row or column (used for vertical or horizontal motion)
+        self.map_limit = map_limit
 
     def update(self, trash_objects):
         # Update fatness animation
@@ -123,37 +116,9 @@ class CleaningBot:
         is_moving = False
 
         if self.state == "searching":
-            closest_trash = self.search_trash(trash_objects)
-            if closest_trash:
-                # Calculate direction to trash
-                dx = closest_trash.Position[0] - self.Position[0]
-                dz = closest_trash.Position[2] - self.Position[2]
-                dist = math.sqrt(dx * dx + dz * dz)
-
-                if dist < 10.0:  # Half the collection range
-                    # Immediately collect the trash
-                    closest_trash.is_collected = True
-                    self.carrying_trash = closest_trash
-                    # Start eating animation and get fat
-                    self.state = "eating"
-                    self.eating_animation_progress = 0.0
-                    self.eating_animation_state = "closed"
-                    self.eating_cycles = 0
-                    self.target_fatness = 1.4  # Start getting fat
-                else:
-                    # Calculate angle in degrees
-                    target_angle = math.degrees(math.atan2(dx, dz))
-                    # Update rotation to face the trash
-                    self.rotation = target_angle
-
-                    # Move towards trash
-                    self.Position[0] += self.speed * math.sin(
-                        math.radians(self.rotation)
-                    )
-                    self.Position[2] += self.speed * math.cos(
-                        math.radians(self.rotation)
-                    )
-                    is_moving = True
+           self.lawnmower_movement() 
+           self.check_trash_collision(trash_objects)
+           is_moving = True
         elif self.state == "eating":
             # Update eating animation
             self.eating_animation_progress += self.eating_animation_speed
@@ -189,9 +154,14 @@ class CleaningBot:
             if self.dump_animation_progress >= 1.0:
                 self.dump_animation_progress = 0.0
                 self.carrying_trash = None
-                self.state = "searching"
+                self.state = "restart_position"
                 self.target_fatness = 1.0  # Return to normal size after dumping
-
+        elif self.state == 'restart_position':
+            self.restart_position()
+        elif self.state == 'align': # falta llamar a este estado
+            self.align()
+        
+        
         # Update leg animation
         if is_moving:
             self.leg_animation_phase += self.leg_animation_speed
@@ -201,6 +171,24 @@ class CleaningBot:
             # Reset leg animation phase when not moving
             self.leg_animation_phase = 0.0
 
+    def lawnmower_movement(self):
+        """Move the bot in a lawnmower pattern along the x-axis. Switch rows on the z-axis."""
+        # Check if the bot is at the x-axis boundary
+        if self.Position[0] -10 >= self.map_limit - 20 or self.Position[0] - 10 <= -self.map_limit + 20:
+            self.rotation = (self.rotation + 180) % 360
+            # Move to the next row by increasing Z position
+            self.Position[2] -= 10  # Adjust this based on your row spacing
+            self.lane += 1
+            self.direction *= -1  # Reverse direction on the X-axis
+            if self.lane % 2 == 0:
+                self.Position[0] -= 5
+            else:
+                self.Position[0] += 5
+        else:
+            # Continue moving along the current row (x-axis)
+            self.Position[0] += self.speed * self.direction
+            # print(self.Position[0])
+        
     def draw_body(self):
         glColor3f(0.0, 0.7, 0.0)  # Green color for body
 
@@ -499,22 +487,13 @@ class CleaningBot:
             if hasattr(self, "_notified_toilet"):
                 del self._notified_toilet
 
-    def search_trash(self, trash_objects):
-        # Find nearest uncollected trash
-        nearest_trash = None
-        min_dist = float("inf")
-
+    def check_trash_collision(self, trash_objects):
         for trash in trash_objects:
-            if not trash.is_collected:
-                dist = math.sqrt(
-                    (self.Position[0] - trash.Position[0]) ** 2
-                    + (self.Position[2] - trash.Position[2]) ** 2
-                )
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest_trash = trash
-
-        return nearest_trash
+                if not trash.is_collected:
+                    if abs(self.Position[0] - trash.Position[0]) <= 5 and abs(self.Position[2] - trash.Position[2]) <= 5:
+                        print('collision')
+                        trash.is_collected = True
+                        self.state = 'eating'
 
     def return_to_base(self):
         # Move towards center (0,0,0)
@@ -623,3 +602,28 @@ class CleaningBot:
                     # Update position only if it won't cause collision
                     self.Position[0] = new_x
                     self.Position[2] = new_z
+
+    def restart_position(self):
+        # Calculate distance to the adjusted starting position (map_limit - 20)
+        target_x = self.map_limit - 10
+        target_z = self.map_limit - 10
+        
+        dx = target_x - self.Position[0]
+        dz = target_z - self.Position[2]
+        dist = math.sqrt(dx * dx + dz * dz)
+
+        if dist < 5.0:  # When close enough to the target position
+            # Calculate the angle to face the target position
+            self.rotation = math.degrees(math.atan2(dx, dz))
+            self.state = "searching"  # Transition to searching state or any other state
+        else:
+            # Calculate the angle to face the target position
+            self.rotation = math.degrees(math.atan2(dx, dz))
+
+            # Move towards the target position with speed
+            self.Position[0] += self.speed * math.sin(math.radians(self.rotation))
+            self.Position[2] += self.speed * math.cos(math.radians(self.rotation))
+            
+    def align(self):
+        self.rotation = math.degrees(60) # falta el angulo exacto
+        self.state = 'searching'

@@ -144,7 +144,7 @@ def Init():
     
     # Initialize bots and trash
     for i in range(n_bots):
-        bot = CleaningBot(DimBoard, i, n_bots, bot_face_texture)
+        bot = CleaningBot(DimBoard, i, n_bots, bot_face_texture, DimBoard)
         bot.face_texture_open = bot_face_open_texture
         bots.append(bot)
     for i in range(n_trash):
