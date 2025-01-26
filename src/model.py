@@ -15,13 +15,26 @@ import matplotlib.pyplot as plt
 class CleaningBotAgent(ap.Agent):
     def setup(self):
         """Set up the CleaningBot agent."""
+        # Decide spawn corner & direction based on agent ID or any logic you like
+        if self.id < 3:
+            # Put 3 bots in bottom-left corner
+            spawn_position = [-self.p['map_limit'] + 20, 0, -self.p['map_limit'] + 20]
+            direction = 1   # left->right
+        else:
+            # Remaining 2 bots top-right corner
+            spawn_position = [self.p['map_limit'] - 20, 0, self.p['map_limit'] - 20]
+            direction = -1  # right->left
+
+        # Now pass them
         self.bot = CleaningBot(
-            self.p['dim'],
-            self.id,
-            self.p['n_bots'],
-            self.p['face_texture'],
-            self.p['map_limit'],
-            self.p['toilet']
+            dim=self.p['dim'],
+            bot_index=self.id,
+            total_bots=self.p['n_bots'],
+            face_texture=self.p['face_texture'],
+            map_limit=self.p['map_limit'],
+            toilet=self.p['toilet'],
+            spawn_position=spawn_position,       # <== new
+            lawnmower_direction=direction        # <== new
         )
         self.has_delivered_trash = False
 
